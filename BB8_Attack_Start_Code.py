@@ -1,6 +1,6 @@
-#Sign your name:________________
+# 14.0 BB8 ATTACK GAME   Name:________________
  
-#You will use the starting code below and build the program "BB8 Attack" as you go through Chapter 15.
+#You will use the starting code below and build the program "BB8 Attack" as you go through Chapter 14.
 
 
 import random
