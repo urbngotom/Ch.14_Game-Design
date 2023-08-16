@@ -1,6 +1,6 @@
 '''
-SPRITE GAME
------------
+FINAL GAME PROJECT
+------------------
 Here you will start the beginning of a game that you will be able to update as we
 learn more in upcoming chapters. Below are some ideas that you could include:
 
