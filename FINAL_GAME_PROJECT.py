@@ -19,28 +19,256 @@ import random
 import arcade
 
 # --- Constants ---
+# window dimensions
 SW = 800
 SH = 600
 
-#------MyGame Class--------------
-class MyGame(arcade.Window):
+# player constants
+PLAYER_SCALE = 2
+PLAYER_SPEED = 3
+UPDATES_PER_FRAME = 5
+RIGHT_FACING = 0
+LEFT_FACING = 1
 
-    def __init__(self,SW,SH,title):
+# slime constants
+SLIME_SCALE = 2
+SLIME_SPEED = -1
+
+# levels
+LEVELS = 3
+SLIME_COUNT = [0, 2, 4, 8, 0]
+GROUND_LEVEL = SH // 3 + 10
+
+# --- Load Textures ---
+def load_texture_pair(filename):
+    return [
+        arcade.load_texture(filename),
+        arcade.load_texture(filename, flipped_horizontally=True)
+    ]
+
+# --- Player Class ---
+class Player(arcade.Sprite):
+    def __init__(self):
+        super().__init__()
+        self.character_face_direction = RIGHT_FACING
+        self.current_texture = 0
+        self.scale = PLAYER_SCALE
+
+        # check what action player is performing
+        self.is_attacking = False
+
+        # --- Load Textures ---
+        # idle texture
+        self.idle_texture_pair = load_texture_pair("Sprites/Adventurer/idle/adventurer-idle-00.png")
+
+        # run texture
+        self.run_textures = []
+        for i in range(6):
+            texture = load_texture_pair(f"Sprites/Adventurer/run/adventurer-run-0{i}.png")
+            self.run_textures.append(texture)
+
+        # attack texture
+        self.attack_textures = []
+        for i in range(5):
+            texture = load_texture_pair(f"Sprites/Adventurer/attack/adventurer-attack1-0{i}.png")
+            self.attack_textures.append(texture)
+
+        # jump texture
+        self.jump_textures = []
+        for i in range(3):
+            texture = load_texture_pair(f"Sprites/Adventurer/jump/adventurer-crnr-jmp-0{i}.png")
+            self.jump_textures.append(texture)
+
+        # # die texture
+        # die_textures = []
+        # for i in range(7):
+        #     texture = load_texture_pair(f"Sprites/Adventurer/die/adventurer-die-{i}.png")
+        #     die_textures.append(texture)
+
+
+    def update_animation(self, dt):
+        # if needed, change player's facing direction
+        if self.change_x < 0 and self.character_face_direction == RIGHT_FACING:
+            self.character_face_direction = LEFT_FACING
+        if self.change_x > 0 and self.character_face_direction == LEFT_FACING:
+            self.character_face_direction = RIGHT_FACING
+
+        # leftmost boundry of map
+        # if self.right < 0:
+        #     self.change_x *= 0
+
+        # idle animation
+        if self.change_x == 0:
+            self.texture = self.idle_texture_pair[self.character_face_direction]
+            return
+
+        # walking animation
+        self.current_texture += 1
+        if self.current_texture > 5 * UPDATES_PER_FRAME:
+            self.current_texture = 0
+        frame = self.current_texture // UPDATES_PER_FRAME
+        direction = self.character_face_direction
+        self.texture = self.run_textures[frame][direction]
+
+        # attack animation
+        if self.is_attacking:
+            self.current_texture += 1
+            if self.current_texture > 4 * UPDATES_PER_FRAME:
+                self.current_texture = 0
+            frame = self.current_texture // UPDATES_PER_FRAME
+            direction = self.character_face_direction
+            self.texture = self.attack_textures[frame][direction]
+
+
+# --- Slime Class ---
+class Slime(arcade.Sprite):
+    def __init__(self):
+        super().__init__()
+        self.current_texture = 0
+        self.scale = SLIME_SCALE
+        self.slime_face_direction = LEFT_FACING
+        self.change_x = SLIME_SPEED
+
+        # load textures
+        self.hop_textures = []
+        for i in range(7):
+            texture = load_texture_pair(f"Sprites/slime/slime_{i}.png")
+            self.hop_textures.append(texture)
+
+    def update_animation(self, dt):
+        self.center_x += self.change_x
+
+        if self.center_x > SW and self.slime_face_direction == RIGHT_FACING:
+            self.slime_face_direction = LEFT_FACING
+            self.change_x *= -1
+        if self.center_x < 0 and self.slime_face_direction == LEFT_FACING:
+            self.slime_face_direction = RIGHT_FACING
+            self.change_x *= -1
+
+        # HOPPING ANIMATION
+        self.current_texture += 1
+        if self.current_texture > 6 * UPDATES_PER_FRAME:
+            self.current_texture = 0
+        frame = self.current_texture // UPDATES_PER_FRAME
+        direction = self.slime_face_direction
+        self.texture = self.hop_textures[frame][direction]
+
+
+# ------MyGame Class--------------
+class MyGame(arcade.Window):
+    def __init__(self, SW, SH, title):
         super().__init__(SW, SH, title)
-        arcade.set_background_color(arcade.color.WHITE)
+        arcade.set_background_color(arcade.color.SKY_BLUE)
+        self.set_mouse_visible(False)
+        self.current_level = 0
+        self.gameover = True
+        self.attack_hitbox = arcade.load_texture("Sprites/Adventurer/attack_hitbox.png")
+
+        # load backgrounds
+        self.background = arcade.load_texture("background/cave1.png")
+
+    def reset(self):
+        # create Sprite Lists
+        self.player_list = arcade.SpriteList()
+        self.enemy_list = arcade.SpriteList()
+
+        # initiate the score
+        self.score = 0
+
+        # create Player
+        self.adventurer = Player()
+        self.adventurer.center_x = SW // 2
+        self.adventurer.center_y = GROUND_LEVEL
+        self.player_list.append(self.adventurer)
+
+        # create Slimes
+        for i in range(SLIME_COUNT[self.current_level]):
+            slime = Slime()
+            if i % 2 == 0:
+                slime.center_x = random.randint(SW+100, SW+500)
+                slime.center_y = GROUND_LEVEL - 25
+            else:
+                slime.center_x = random.randint(-500, -50)
+                slime.center_y = GROUND_LEVEL - 25
+            self.enemy_list.append(slime)
+
 
     def on_draw(self):
         arcade.start_render()
 
+        if self.current_level == 0:
+            arcade.draw_rectangle_filled(SW / 2, SH / 2, SW, SH, arcade.color.BLACK)
+            arcade.draw_text("Press P to play", SW / 2, SH / 2,
+                             arcade.color.NEON_GREEN, 14, anchor_x="center", anchor_y="center")
+
+        elif not self.gameover:
+            # draw backgrounds
+            for i in range(1, 2):
+                arcade.draw_texture_rectangle(SW // 2 * i, SH // 2 * i, SW, SH, self.background)
+                arcade.draw_rectangle_filled(SW // 2 * i, SH // 8 * i, SW, SH // 3, arcade.color.BLACK)
+
+            self.player_list.draw()
+            self.enemy_list.draw()
+
+            # draws transparent hit box for sword
+            if self.adventurer.character_face_direction == RIGHT_FACING and self.adventurer.is_attacking:
+                arcade.draw_texture_rectangle(self.adventurer.center_x + 10, self.adventurer.center_y,
+                                              self.adventurer.width - 30, self.adventurer.height, self.attack_hitbox)
+            elif self.adventurer.character_face_direction == LEFT_FACING and self.adventurer.is_attacking:
+                pass
+                #work on incorporating attack hitbox for left side
+                # self.attack_hitbox = arcade.draw_rectangle_filled(self.adventurer.center_x - 10, self.adventurer.center_y,
+                #                                              self.adventurer.width - 30, self.adventurer.height, (0, 0, 0, 100))
+
+            # put the text on screen
+            output = f"Score: {self.score}"
+            arcade.draw_text(output, 10, 20, arcade.color.BLACK, 14)
+
     def on_update(self, dt):
-        pass
+        if self.current_level in range(1, LEVELS+1):
+            self.gameover = False
+        else:
+            self.gameover = True
+
+        if not self.gameover:
+            self.player_list.update()
+            self.player_list.update_animation()
+            self.enemy_list.update_animation()
+
+            # slime_hit = arcade.check_for_collision_with_list(self.attack_hitbox, self.enemy_list)
+            # for slime in slime_hit:
+            #     slime.kill()
 
 
-#-----Main Function--------
+    def on_key_press(self, key, modifiers):
+        if key == arcade.key.A:
+            self.adventurer.change_x = -PLAYER_SPEED
+        elif key == arcade.key.D:
+            self.adventurer.change_x = PLAYER_SPEED
+        elif key == arcade.key.J:
+            self.adventurer.is_attacking = True
+        elif key == arcade.key.P and self.gameover:
+            self.current_level = 1
+            self.score = 0
+            self.reset()
+        elif key == arcade.key.I and self.gameover:
+            self.current_level = 0
+
+
+    def on_key_release(self, key, modifiers):
+        if key == arcade.key.A or key == arcade.key.D:
+            self.adventurer.change_x = 0
+        elif key == arcade.key.J:
+            self.adventurer.is_attacking = False
+
+
+# -----Main Function--------
 def main():
-    window = MyGame(SW,SH,"My Game")
+    window = MyGame(SW, SH, "Cavern")
+    window.reset()
     arcade.run()
 
-#------Run Main Function-----
+
+# ------Run Main Function-----
 if __name__ == "__main__":
     main()
