@@ -73,19 +73,6 @@ class Player(arcade.Sprite):
             texture = load_texture_pair(f"Sprites/Adventurer/attack/adventurer-attack1-0{i}.png")
             self.attack_textures.append(texture)
 
-        # jump texture
-        self.jump_textures = []
-        for i in range(3):
-            texture = load_texture_pair(f"Sprites/Adventurer/jump/adventurer-crnr-jmp-0{i}.png")
-            self.jump_textures.append(texture)
-
-        # # die texture
-        # die_textures = []
-        # for i in range(7):
-        #     texture = load_texture_pair(f"Sprites/Adventurer/die/adventurer-die-{i}.png")
-        #     die_textures.append(texture)
-
-
     def update_animation(self, dt):
         # if needed, change player's facing direction
         if self.change_x < 0 and self.character_face_direction == RIGHT_FACING:
@@ -93,9 +80,9 @@ class Player(arcade.Sprite):
         if self.change_x > 0 and self.character_face_direction == LEFT_FACING:
             self.character_face_direction = RIGHT_FACING
 
-        # leftmost boundry of map
-        # if self.right < 0:
-        #     self.change_x *= 0
+        # leftmost boundry of map prob need to check how to loop each frame
+        if self.center_x - 15 < 0:
+            self.change_x *= 0
 
         # idle animation
         if self.change_x == 0:
@@ -128,6 +115,7 @@ class Slime(arcade.Sprite):
         self.scale = SLIME_SCALE
         self.slime_face_direction = LEFT_FACING
         self.change_x = SLIME_SPEED
+        self.death_sound = arcade.load_sound("sounds/slime_death.wav")
 
         # load textures
         self.hop_textures = []
@@ -154,6 +142,22 @@ class Slime(arcade.Sprite):
         self.texture = self.hop_textures[frame][direction]
 
 
+# --- Explosion Class ---
+class Explosion(arcade.Sprite):
+    def __init__(self, texture_list):
+        super().__init__("Sprites/Explosion/Explosion_1.png")
+        self.textures = texture_list
+        self.current_texture = 0
+        self.scale = 0.25
+
+    def update(self):
+        self.current_texture += 1
+        if self.current_texture < len(self.textures):
+            self.set_texture(self.current_texture)
+        else:
+            self.kill()
+
+
 # ------MyGame Class--------------
 class MyGame(arcade.Window):
     def __init__(self, SW, SH, title):
@@ -162,18 +166,33 @@ class MyGame(arcade.Window):
         self.set_mouse_visible(False)
         self.current_level = 0
         self.gameover = True
-        self.attack_hitbox = arcade.load_texture("Sprites/Adventurer/attack_hitbox.png")
+        self.score = 0
+        self.background_noise = arcade.load_sound("sounds/droplets.wav")
+        arcade.play_sound(self.background_noise)
 
         # load backgrounds
         self.background = arcade.load_texture("background/cave1.png")
+
+        # Preload the explosion texture list
+        self.explosion_texture_list = []
+        for i in range(1, 11):
+            texture_name = f"Sprites/Explosion/Explosion_{i}.png"
+            self.explosion_texture_list.append(arcade.load_texture(texture_name))
 
     def reset(self):
         # create Sprite Lists
         self.player_list = arcade.SpriteList()
         self.enemy_list = arcade.SpriteList()
+        self.attack_hitbox_list = arcade.SpriteList()
+        self.explosions_list = arcade.SpriteList()
+        self.enemy_icon_list = arcade.SpriteList()
 
-        # initiate the score
-        self.score = 0
+        # enemy icon next to enemy counter
+        self.enemies_left = SLIME_COUNT[self.current_level]
+        self.enemy_icon = arcade.Sprite("Sprites/enemy_counter.png", 0.1)
+        self.enemy_icon.center_x = 30
+        self.enemy_icon.center_y = 35
+        self.enemy_icon_list.append(self.enemy_icon)
 
         # create Player
         self.adventurer = Player()
@@ -198,7 +217,7 @@ class MyGame(arcade.Window):
 
         if self.current_level == 0:
             arcade.draw_rectangle_filled(SW / 2, SH / 2, SW, SH, arcade.color.BLACK)
-            arcade.draw_text("Press P to play", SW / 2, SH / 2,
+            arcade.draw_text("Use A and D to move. Use J while moving to attack. Press P to play", SW / 2, SH / 2,
                              arcade.color.NEON_GREEN, 14, anchor_x="center", anchor_y="center")
 
         elif not self.gameover:
@@ -209,20 +228,51 @@ class MyGame(arcade.Window):
 
             self.player_list.draw()
             self.enemy_list.draw()
+            self.attack_hitbox_list.draw()
+            self.explosions_list.draw()
+            self.enemy_icon_list.draw()
 
-            # draws transparent hit box for sword
+            # draws transparent hit box for sword if player is attacking
             if self.adventurer.character_face_direction == RIGHT_FACING and self.adventurer.is_attacking:
-                arcade.draw_texture_rectangle(self.adventurer.center_x + 10, self.adventurer.center_y,
-                                              self.adventurer.width - 30, self.adventurer.height, self.attack_hitbox)
+                self.attack_hitbox = arcade.Sprite("Sprites/Adventurer/attack_hitbox1.png", 1)
+                self.attack_hitbox.center_x = self.adventurer.center_x + 20
+                self.attack_hitbox.center_y = self.adventurer.center_y
+                self.attack_hitbox.width = self.adventurer.width - 45
+                self.attack_hitbox.height = self.adventurer.height
+                self.attack_hitbox_list.append(self.attack_hitbox)
+                self.attack_hitbox_list.clear()
             elif self.adventurer.character_face_direction == LEFT_FACING and self.adventurer.is_attacking:
-                pass
-                #work on incorporating attack hitbox for left side
-                # self.attack_hitbox = arcade.draw_rectangle_filled(self.adventurer.center_x - 10, self.adventurer.center_y,
-                #                                              self.adventurer.width - 30, self.adventurer.height, (0, 0, 0, 100))
+                self.attack_hitbox = arcade.Sprite("Sprites/Adventurer/attack_hitbox1.png", 1)
+                self.attack_hitbox.center_x = self.adventurer.center_x - 20
+                self.attack_hitbox.center_y = self.adventurer.center_y
+                self.attack_hitbox.width = self.adventurer.width - 45
+                self.attack_hitbox.height = self.adventurer.height
+                self.attack_hitbox_list.append(self.attack_hitbox)
+                self.attack_hitbox_list.clear()
 
-            # put the text on screen
+            # put the score and enemy counter text on screen
             output = f"Score: {self.score}"
-            arcade.draw_text(output, 10, 20, arcade.color.BLACK, 14)
+            arcade.draw_text(output, SW - 100, 20, arcade.color.WHITE, 14)
+
+            output = f"{self.enemies_left} left"
+            arcade.draw_text(output, 60, 20, arcade.color.WHITE, 14)
+
+        else:
+            # Winning screen
+            if self.gameover and self.current_level == 4:
+                arcade.draw_rectangle_filled(SW / 2, SH / 2, SW, SH, arcade.color.BLACK)
+                arcade.draw_text(f"Enemies Killed: {self.score}", SW / 2, SH / 2 + 30, arcade.color.NEON_GREEN, 14,
+                                 anchor_x="center", anchor_y="center")
+                arcade.draw_text("You Won! Press P to play again!", SW / 2, SH / 2, arcade.color.NEON_GREEN, 14,
+                                 anchor_x="center", anchor_y="center")
+
+            # Game over screen if user lost
+            if self.current_level != 4 and self.gameover:
+                arcade.draw_rectangle_filled(SW / 2, SH / 2, SW, SH, arcade.color.BLACK)
+                arcade.draw_text(f"Enemies Killed: {self.score}", SW / 2, SH / 2 + 30, arcade.color.NEON_GREEN, 14,
+                                 anchor_x="center", anchor_y="center")
+                arcade.draw_text("Game Over! Press P to play again!", SW / 2, SH / 2, arcade.color.NEON_GREEN, 14,
+                                 anchor_x="center", anchor_y="center")
 
     def on_update(self, dt):
         if self.current_level in range(1, LEVELS+1):
@@ -234,11 +284,35 @@ class MyGame(arcade.Window):
             self.player_list.update()
             self.player_list.update_animation()
             self.enemy_list.update_animation()
+            self.attack_hitbox_list.update_animation()
+            self.explosions_list.update()
 
-            # slime_hit = arcade.check_for_collision_with_list(self.attack_hitbox, self.enemy_list)
-            # for slime in slime_hit:
-            #     slime.kill()
+            # move onto next level if all enemies cleared
+            if len(self.enemy_list) == 0 and not self.gameover:
+                self.current_level += 1
+                self.reset()
 
+            # check if player attacks slime
+            if self.adventurer.is_attacking:
+                slime_hit = arcade.check_for_collision_with_list(self.attack_hitbox, self.enemy_list)
+                if len(slime_hit) > 0 and not self.gameover:
+                    for slime in slime_hit:
+                        slime.kill()
+                        explosion = Explosion(self.explosion_texture_list)
+                        explosion.center_x = slime_hit[0].center_x
+                        explosion.center_y = slime_hit[0].center_y
+                        self.explosions_list.append(explosion)
+                        arcade.play_sound(slime.death_sound)
+                        self.score += 1
+                        self.enemies_left -= 1
+
+            # check if player is hit by slime
+            for slime in self.enemy_list:
+                player_hit = arcade.check_for_collision_with_list(slime, self.player_list)
+                if len(player_hit) > 0 and not self.gameover:
+                    self.gameover = True
+                    self.current_level = LEVELS + 2
+                    self.adventurer.kill()
 
     def on_key_press(self, key, modifiers):
         if key == arcade.key.A:
@@ -254,17 +328,17 @@ class MyGame(arcade.Window):
         elif key == arcade.key.I and self.gameover:
             self.current_level = 0
 
-
     def on_key_release(self, key, modifiers):
         if key == arcade.key.A or key == arcade.key.D:
             self.adventurer.change_x = 0
         elif key == arcade.key.J:
             self.adventurer.is_attacking = False
+            self.attack_hitbox_list.clear()
 
 
 # -----Main Function--------
 def main():
-    window = MyGame(SW, SH, "Cavern")
+    window = MyGame(SW, SH, "Slimevasion")
     window.reset()
     arcade.run()
 
